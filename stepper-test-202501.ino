@@ -7,12 +7,12 @@ const int stepsPerRevolution = 2038;
 Stepper myStepper(stepsPerRevolution, 8, 9, 10, 11);
 
 void setup() {
-  // speed at 2 RPM (3+ starts being weak and stalling out)
-  myStepper.setSpeed(2);
+  // speed at 4 RPM (5+ starts being weak and stalling out)
+  myStepper.setSpeed(4);
 }
 
 void loop() {
   // 90deg turn and delay
-  myStepper.step(stepsPerRevolution / 4);
+  myStepper.step(-stepsPerRevolution / 4);
   delay(500);
 }
