@@ -18,11 +18,11 @@ const int freqInPin = A1;
 
 int dirState = 0;
 
+unsigned long animCountdownUs = 0;
+unsigned long lastNow = 0;
+
 float posState = 0;
 int stepOffset = 0; // actual position in steps
-
-const int freqReadRangeMin = 100;
-const int freqReadRangeAmount = (1023 - freqReadRangeMin);
 
 unsigned int stepIndex = 0; // 0-3
 unsigned int stepsSinceMove = 0;
@@ -42,10 +42,25 @@ void setup() {
 
   // speed at 4 RPM (5+ starts being weak and stalling out)
   // myStepper.setSpeed(4);
+
+  lastNow = micros();
 }
 
 void loop() {
   stepsSinceMove = min(20, stepsSinceMove + 1);
+
+  unsigned long now = micros();
+  unsigned long deltaUs = min(50000, now - lastNow); // prevent overflow
+  lastNow = now;
+
+  if (animCountdownUs > 0) {
+    float t = animCountdownUs / 1000000.0f;
+    posState = sin(t * 3.14159f * 2.0f);
+
+    animCountdownUs = deltaUs > animCountdownUs ? 0 : animCountdownUs - deltaUs;
+  } else {
+    posState = 0;
+  }
 
   if (dirState < -1) {
     // myStepper.step(-1);
@@ -117,8 +132,13 @@ void loop() {
   }
 
   // frequency in
-  float posRead = (analogRead(freqInPin) / 1023.0f) - 0.5f;
-  posState = posState * 0.6f + posRead * 0.4f; // smooth out the input
+  // float posRead = (analogRead(freqInPin) / 1023.0f) - 0.5f;
+  // posState = posState * 0.6f + posRead * 0.4f; // smooth out the input
+
+  // cheap trigger for animation
+  if (abs(analogRead(freqInPin) - 512) > 200) {
+    animCountdownUs = 1000000;
+  }
 
   delay(2); // 4rpm = ~7.5ms per step
 }
