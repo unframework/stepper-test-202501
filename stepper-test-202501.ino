@@ -25,6 +25,7 @@ const int freqReadRangeMin = 100;
 const int freqReadRangeAmount = (1023 - freqReadRangeMin);
 
 unsigned int stepIndex = 0; // 0-3
+unsigned int stepsSinceMove = 0;
 
 void setup() {
   // input pins
@@ -44,18 +45,24 @@ void setup() {
 }
 
 void loop() {
+  stepsSinceMove = min(20, stepsSinceMove + 1);
+
   if (dirState < -1) {
     // myStepper.step(-1);
+    stepsSinceMove = 0;
     stepIndex = (stepIndex - 1) % 4;
   } else if (dirState > 1) {
     // myStepper.step(1);
+    stepsSinceMove = 0;
     stepIndex = (stepIndex + 1) % 4;
   } else {
     int diff = posState * 200 - stepOffset;
     if (diff > 5) {
+      stepsSinceMove = 0;
       stepIndex = (stepIndex + 1) % 4;
       stepOffset++;
     } else if (diff < -5) {
+      stepsSinceMove = 0;
       stepIndex = (stepIndex - 1) % 4;
       stepOffset--;
     }
@@ -63,7 +70,7 @@ void loop() {
 
   // apply current step pins
   // (https://github.com/arduino-libraries/Stepper/blob/master/src/Stepper.cpp)
-  switch (stepIndex) {
+  switch (stepsSinceMove < 20 ? stepIndex : 99) {
   case 0: // 1010
     digitalWrite(motorPin1, HIGH);
     digitalWrite(motorPin2, LOW);
@@ -88,6 +95,11 @@ void loop() {
     digitalWrite(motorPin3, LOW);
     digitalWrite(motorPin4, HIGH);
     break;
+  default: // 0000 to cool down
+    digitalWrite(motorPin1, LOW);
+    digitalWrite(motorPin2, LOW);
+    digitalWrite(motorPin3, LOW);
+    digitalWrite(motorPin4, LOW);
   }
 
   // check for button press
