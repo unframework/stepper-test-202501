@@ -46,6 +46,10 @@ void setup() {
   lastNow = micros();
 }
 
+const float resoHz = 2.15f; // 3.3f;
+const float cycles = 2.0f;
+const float dur = cycles / resoHz;
+
 void loop() {
   stepsSinceMove = min(20, stepsSinceMove + 1);
 
@@ -54,8 +58,11 @@ void loop() {
   lastNow = now;
 
   if (animCountdownUs > 0) {
-    float t = animCountdownUs / 1000000.0f;
-    posState = sin(t * 3.14159f * 2.0f);
+    // normalize to 0..1 (to fit predictable number of sin() cycles)
+    float t = 1.0f - (animCountdownUs / 1000000.0f) / dur;
+
+    // up-down-up swings of sin() with a slow raise (and then release)
+    posState = sin(t * 3.14159f * 2.0f * cycles) * 0.4f - t * 2.0f;
 
     animCountdownUs = deltaUs > animCountdownUs ? 0 : animCountdownUs - deltaUs;
   } else {
@@ -71,7 +78,7 @@ void loop() {
     stepsSinceMove = 0;
     stepIndex = (stepIndex + 1) % 4;
   } else {
-    int diff = posState * 200 - stepOffset;
+    int diff = posState * 100 - stepOffset;
     if (diff > 5) {
       stepsSinceMove = 0;
       stepIndex = (stepIndex + 1) % 4;
@@ -137,8 +144,9 @@ void loop() {
 
   // cheap trigger for animation
   if (abs(analogRead(freqInPin) - 512) > 200) {
-    animCountdownUs = 1000000;
+    animCountdownUs = 1000000 * dur;
   }
 
-  delay(2); // 4rpm = ~7.5ms per step
+  // delay(2); // 4rpm = ~7.5ms per step
+  delayMicroseconds(1500);
 }
