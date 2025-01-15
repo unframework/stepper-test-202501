@@ -18,11 +18,13 @@ const int freqInPin = A1;
 
 int dirState = 0;
 
-// 0 = off, period = 20 steps + 100 steps * N ie about 100ms to 600ms
-float freqState = 0;
+float posState = 0;
+int stepOffset = 0; // actual position in steps
 
 const int freqReadRangeMin = 100;
 const int freqReadRangeAmount = (1023 - freqReadRangeMin);
+
+unsigned int stepIndex = 0; // 0-3
 
 void setup() {
   // input pins
@@ -41,10 +43,6 @@ void setup() {
   // myStepper.setSpeed(4);
 }
 
-int periodN = 0;
-
-unsigned int stepIndex = 0; // 0-3
-
 void loop() {
   if (dirState < -1) {
     // myStepper.step(-1);
@@ -53,28 +51,13 @@ void loop() {
     // myStepper.step(1);
     stepIndex = (stepIndex + 1) % 4;
   } else {
-    if (freqState > 0.05f) {
-      int period = 260.0f - 220.0f * freqState;
-      periodN++;
-
-      if (periodN > period) {
-        periodN = 0;
-      }
-
-      int pos = periodN - period / 2;
-      if (pos < 0) {
-        // check for a small cooldown first
-        if (periodN > 10) {
-          // myStepper.step(-1);
-          stepIndex = (stepIndex - 1) % 4;
-        }
-      } else {
-        // check for a small cooldown first
-        if (pos > 10) {
-          // myStepper.step(1);
-          stepIndex = (stepIndex + 1) % 4;
-        }
-      }
+    int diff = posState * 200 - stepOffset;
+    if (diff > 5) {
+      stepIndex = (stepIndex + 1) % 4;
+      stepOffset++;
+    } else if (diff < -5) {
+      stepIndex = (stepIndex - 1) % 4;
+      stepOffset--;
     }
   }
 
@@ -122,9 +105,8 @@ void loop() {
   }
 
   // frequency in
-  float freqRead = max(0, analogRead(freqInPin) - freqReadRangeMin) /
-                   (float)freqReadRangeAmount;
-  freqState = freqState * 0.9f + 0.1f * freqRead; // smooth out the input
+  float posRead = (analogRead(freqInPin) / 1023.0f) - 0.5f;
+  posState = posState * 0.6f + posRead * 0.4f; // smooth out the input
 
   delay(2); // 4rpm = ~7.5ms per step
 }
