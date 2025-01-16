@@ -108,11 +108,21 @@ void setup() {
   // driver pins
   stepperA.setup();
 
-  // speed at 4 RPM (5+ starts being weak and stalling out)
-  // myStepper.setSpeed(4);
-
   lastNow = micros();
+
+  // set up timer for 2ms interrupt (about as fast as the servo goes)
+  cli();
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1 = 0;
+  OCR1A = 3999;            // compare match register 16MHz/8/500Hz
+  TCCR1B |= (1 << WGM12);  // CTC mode
+  TCCR1B |= (1 << CS11);   // 8 prescaler
+  TIMSK1 |= (1 << OCIE1A); // enable timer compare interrupt
+  sei();
 }
+
+ISR(TIMER1_COMPA_vect) { stepperA.applyStep(); }
 
 const float resoHz = 2.15f; // 3.3f;
 const float cycles = 2.0f;
@@ -162,8 +172,6 @@ void loop() {
     animCountdownUs = 1000000 * dur;
   }
 
-  // delay(2); // 4rpm = ~7.5ms per step
-  // @todo move into interrupt
-  stepperA.applyStep();
-  delayMicroseconds(1500);
+  // input/animation loop delay
+  delay(1);
 }
