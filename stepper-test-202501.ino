@@ -3,13 +3,90 @@
 // actually ~2036.8? per https://www.youtube.com/watch?v=B86nqDRskVU
 const int stepsPerRevolution = 2038;
 
-// IN1-IN4 = pin 8-11
-const int motorPin1 = 8;
-const int motorPin2 = 9;
-const int motorPin3 = 10;
-const int motorPin4 = 11;
+const int holdStepMax = 20;
+class SoftStep {
+public:
+  SoftStep(int pin1, int pin2, int pin3, int pin4)
+      : pin1(pin1), pin2(pin2), pin3(pin3), pin4(pin4) {}
 
-// Stepper myStepper(stepsPerRevolution, 8, 9, 10, 11);
+  void setup() {
+    pinMode(pin1, OUTPUT);
+    pinMode(pin2, OUTPUT);
+    pinMode(pin3, OUTPUT);
+    pinMode(pin4, OUTPUT);
+  }
+
+  void setTarget(int target) { this->target = target; }
+  void setSpeed(int speed) { this->speed = speed; }
+
+  void applyStep() {
+    holdStepCount = min(holdStepMax, holdStepCount + 1);
+
+    // apply speed
+    offset += speed;
+
+    // move within range of target position
+    // TODO check for underflow/overflow or use longs
+    int realTarget = target + offset;
+    if (position < realTarget - 2) {
+      position++;
+      holdStepCount = 0;
+    } else if (position > realTarget + 2) {
+      position--;
+      holdStepCount = 0;
+    }
+
+    // apply current step pins
+    // (https://github.com/arduino-libraries/Stepper/blob/master/src/Stepper.cpp)
+    switch (holdStepCount < holdStepMax ? position & 0b11 : 99) {
+    case 0: // 1010
+      digitalWrite(pin1, HIGH);
+      digitalWrite(pin2, LOW);
+      digitalWrite(pin3, HIGH);
+      digitalWrite(pin4, LOW);
+      break;
+    case 1: // 0110
+      digitalWrite(pin1, LOW);
+      digitalWrite(pin2, HIGH);
+      digitalWrite(pin3, HIGH);
+      digitalWrite(pin4, LOW);
+      break;
+    case 2: // 0101
+      digitalWrite(pin1, LOW);
+      digitalWrite(pin2, HIGH);
+      digitalWrite(pin3, LOW);
+      digitalWrite(pin4, HIGH);
+      break;
+    case 3: // 1001
+      digitalWrite(pin1, HIGH);
+      digitalWrite(pin2, LOW);
+      digitalWrite(pin3, LOW);
+      digitalWrite(pin4, HIGH);
+      break;
+    default: // 0000 to cool down
+      digitalWrite(pin1, LOW);
+      digitalWrite(pin2, LOW);
+      digitalWrite(pin3, LOW);
+      digitalWrite(pin4, LOW);
+    }
+  }
+
+private:
+  int pin1;
+  int pin2;
+  int pin3;
+  int pin4;
+
+  int target = 0;   // direct setting
+  int offset = 0;   // changed by speed
+  int position = 0; // runs towards target + offset
+  int speed = 0;    // -1..1, affects offset only
+
+  int holdStepCount = 0;
+};
+
+// IN1-IN4 = pin 8-11
+class SoftStep stepperA(8, 9, 10, 11);
 
 // const int pinLeft = 2;
 // const int pinRight = 3;
@@ -21,12 +98,6 @@ int dirState = 0;
 unsigned long animCountdownUs = 0;
 unsigned long lastNow = 0;
 
-float posState = 0;
-int stepOffset = 0; // actual position in steps
-
-unsigned int stepIndex = 0; // 0-3
-unsigned int stepsSinceMove = 0;
-
 void setup() {
   // input pins
   // pinMode(pinLeft, INPUT_PULLUP);
@@ -35,10 +106,7 @@ void setup() {
   pinMode(freqInPin, INPUT);
 
   // driver pins
-  pinMode(motorPin1, OUTPUT);
-  pinMode(motorPin2, OUTPUT);
-  pinMode(motorPin3, OUTPUT);
-  pinMode(motorPin4, OUTPUT);
+  stepperA.setup();
 
   // speed at 4 RPM (5+ starts being weak and stalling out)
   // myStepper.setSpeed(4);
@@ -51,8 +119,6 @@ const float cycles = 2.0f;
 const float dur = cycles / resoHz;
 
 void loop() {
-  stepsSinceMove = min(20, stepsSinceMove + 1);
-
   unsigned long now = micros();
   unsigned long deltaUs = min(50000, now - lastNow); // prevent overflow
   lastNow = now;
@@ -60,68 +126,13 @@ void loop() {
   if (animCountdownUs > 0) {
     // normalize to 0..1 (to fit predictable number of sin() cycles)
     float t = 1.0f - (animCountdownUs / 1000000.0f) / dur;
+    animCountdownUs = deltaUs > animCountdownUs ? 0 : animCountdownUs - deltaUs;
 
     // up-down-up swings of sin() with a slow raise (and then release)
-    posState = sin(t * 3.14159f * 2.0f * cycles) * 0.4f - t * 2.0f;
-
-    animCountdownUs = deltaUs > animCountdownUs ? 0 : animCountdownUs - deltaUs;
+    float posState = sin(t * 3.14159f * 2.0f * cycles) * 0.4f - t * 2.0f;
+    stepperA.setTarget(posState * 100);
   } else {
-    posState = 0;
-  }
-
-  if (dirState < -1) {
-    // myStepper.step(-1);
-    stepsSinceMove = 0;
-    stepIndex = (stepIndex - 1) % 4;
-  } else if (dirState > 1) {
-    // myStepper.step(1);
-    stepsSinceMove = 0;
-    stepIndex = (stepIndex + 1) % 4;
-  } else {
-    int diff = posState * 100 - stepOffset;
-    if (diff > 5) {
-      stepsSinceMove = 0;
-      stepIndex = (stepIndex + 1) % 4;
-      stepOffset++;
-    } else if (diff < -5) {
-      stepsSinceMove = 0;
-      stepIndex = (stepIndex - 1) % 4;
-      stepOffset--;
-    }
-  }
-
-  // apply current step pins
-  // (https://github.com/arduino-libraries/Stepper/blob/master/src/Stepper.cpp)
-  switch (stepsSinceMove < 20 ? stepIndex : 99) {
-  case 0: // 1010
-    digitalWrite(motorPin1, HIGH);
-    digitalWrite(motorPin2, LOW);
-    digitalWrite(motorPin3, HIGH);
-    digitalWrite(motorPin4, LOW);
-    break;
-  case 1: // 0110
-    digitalWrite(motorPin1, LOW);
-    digitalWrite(motorPin2, HIGH);
-    digitalWrite(motorPin3, HIGH);
-    digitalWrite(motorPin4, LOW);
-    break;
-  case 2: // 0101
-    digitalWrite(motorPin1, LOW);
-    digitalWrite(motorPin2, HIGH);
-    digitalWrite(motorPin3, LOW);
-    digitalWrite(motorPin4, HIGH);
-    break;
-  case 3: // 1001
-    digitalWrite(motorPin1, HIGH);
-    digitalWrite(motorPin2, LOW);
-    digitalWrite(motorPin3, LOW);
-    digitalWrite(motorPin4, HIGH);
-    break;
-  default: // 0000 to cool down
-    digitalWrite(motorPin1, LOW);
-    digitalWrite(motorPin2, LOW);
-    digitalWrite(motorPin3, LOW);
-    digitalWrite(motorPin4, LOW);
+    stepperA.setTarget(0);
   }
 
   // check for button press
@@ -138,9 +149,13 @@ void loop() {
     }
   }
 
-  // frequency in
-  // float posRead = (analogRead(freqInPin) / 1023.0f) - 0.5f;
-  // posState = posState * 0.6f + posRead * 0.4f; // smooth out the input
+  if (dirState < -1) {
+    stepperA.setSpeed(-1);
+  } else if (dirState > 1) {
+    stepperA.setSpeed(1);
+  } else {
+    stepperA.setSpeed(0);
+  }
 
   // cheap trigger for animation
   if (abs(analogRead(freqInPin) - 512) > 200) {
@@ -148,5 +163,7 @@ void loop() {
   }
 
   // delay(2); // 4rpm = ~7.5ms per step
+  // @todo move into interrupt
+  stepperA.applyStep();
   delayMicroseconds(1500);
 }
