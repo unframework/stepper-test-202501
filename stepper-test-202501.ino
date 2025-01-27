@@ -4,6 +4,7 @@
 const int stepsPerRevolution = 2038;
 
 const int holdStepMax = 20;
+
 class SoftStep {
 public:
   SoftStep(int pin1, int pin2, int pin3, int pin4)
@@ -17,7 +18,14 @@ public:
   }
 
   void setTarget(int target) { this->target = target; }
-  void setSpeed(int speed) { this->speed = speed; }
+  void setSpeed(int speed) {
+    // cannot possibly go faster than 1 motor movement per step tick
+    if (speed < -1)
+      speed = -1;
+    if (speed > 1)
+      speed = 1;
+    this->speed = speed;
+  }
 
   void applyStep() {
     holdStepCount = min(holdStepMax, holdStepCount + 1);
@@ -25,13 +33,21 @@ public:
     // apply speed
     offset += speed;
 
+    // overflow intended offset and real position in tandem together
+    // (i.e. preserving their relative diff amount)
+    // this does not need to use the steps-per-revolution value, just be div
+    // by 4 (# of coil steps)
+    int overflowAdjust = -(offset & 0xff00);
+    offset += overflowAdjust;
+    position += overflowAdjust;
+
     // move within range of target position
-    // TODO check for underflow/overflow or use longs
     int realTarget = target + offset;
-    if (position < realTarget - 2) {
+    int diff = realTarget - position;
+    if (diff > 2) {
       position++;
       holdStepCount = 0;
-    } else if (position > realTarget + 2) {
+    } else if (diff < -2) {
       position--;
       holdStepCount = 0;
     }
