@@ -101,8 +101,11 @@ private:
   int holdStepCount = 0;
 };
 
+// IN1-IN4 = pin 4-7
+class SoftStep stepperA(4, 5, 6, 7);
+
 // IN1-IN4 = pin 8-11
-class SoftStep stepperA(8, 9, 10, 11);
+class SoftStep stepperB(8, 9, 10, 11);
 
 // const int pinLeft = 2;
 // const int pinRight = 3;
@@ -110,6 +113,7 @@ const int dirInPin = A0;
 const int freqInPin = A1;
 
 int dirState = 0;
+int dirBState = 0;
 
 unsigned long animCountdownUs = 0;
 unsigned long lastNow = 0;
@@ -123,6 +127,7 @@ void setup() {
 
   // driver pins
   stepperA.setup();
+  stepperB.setup();
 
   lastNow = micros();
 
@@ -138,7 +143,10 @@ void setup() {
   sei();
 }
 
-ISR(TIMER1_COMPA_vect) { stepperA.applyStep(); }
+ISR(TIMER1_COMPA_vect) {
+  stepperA.applyStep();
+  stepperB.applyStep();
+}
 
 const float resoHz = 2.15f; // 3.3f;
 const float cycles = 2.0f;
@@ -175,6 +183,19 @@ void loop() {
     }
   }
 
+  if (analogRead(freqInPin) < 200) {
+    dirBState = max(-4, dirBState - 1);
+  } else if (analogRead(freqInPin) > 823) {
+    dirBState = min(4, dirBState + 1);
+  } else {
+    // return to center
+    if (dirBState > 0) {
+      dirBState--;
+    } else if (dirBState < 0) {
+      dirBState++;
+    }
+  }
+
   if (dirState < -1) {
     stepperA.setSpeed(-1);
   } else if (dirState > 1) {
@@ -183,10 +204,18 @@ void loop() {
     stepperA.setSpeed(0);
   }
 
-  // cheap trigger for animation
-  if (abs(analogRead(freqInPin) - 512) > 200) {
-    animCountdownUs = 1000000 * dur;
+  if (dirBState < -1) {
+    stepperB.setSpeed(-1);
+  } else if (dirBState > 1) {
+    stepperB.setSpeed(1);
+  } else {
+    stepperB.setSpeed(0);
   }
+
+  // cheap trigger for animation
+  // if (abs(analogRead(freqInPin) - 512) > 200) {
+  //   animCountdownUs = 1000000 * dur;
+  // }
 
   // input/animation loop delay
   delay(1);
