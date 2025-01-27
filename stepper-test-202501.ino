@@ -55,10 +55,10 @@ public:
     // apply current step pins
     // (https://github.com/arduino-libraries/Stepper/blob/master/src/Stepper.cpp)
     switch (holdStepCount < holdStepMax ? position & 0b11 : 99) {
-    case 0: // 1010
+    case 0: // 1100
       digitalWrite(pin1, HIGH);
-      digitalWrite(pin2, LOW);
-      digitalWrite(pin3, HIGH);
+      digitalWrite(pin2, HIGH);
+      digitalWrite(pin3, LOW);
       digitalWrite(pin4, LOW);
       break;
     case 1: // 0110
@@ -67,10 +67,10 @@ public:
       digitalWrite(pin3, HIGH);
       digitalWrite(pin4, LOW);
       break;
-    case 2: // 0101
+    case 2: // 0011
       digitalWrite(pin1, LOW);
-      digitalWrite(pin2, HIGH);
-      digitalWrite(pin3, LOW);
+      digitalWrite(pin2, LOW);
+      digitalWrite(pin3, HIGH);
       digitalWrite(pin4, HIGH);
       break;
     case 3: // 1001
